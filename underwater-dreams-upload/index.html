@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Underwater Dreams — ASCII Drift</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020812}
+  canvas{display:block;width:100vw;height:100vh}
+  .hint{position:fixed;left:22px;bottom:18px;color:#8bb8c8;font:11px/1.4 ui-monospace,monospace;letter-spacing:.18em;opacity:.55;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="ocean"></canvas>
+<div class="hint">UNDERWATER DREAMS · TOUCH A JELLYFISH</div>
+<script>
+"use strict";
+const canvas=document.getElementById("ocean"),ctx=canvas.getContext("2d");
+let W,H,DPR, last=0;
+function resize(){DPR=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener("resize",resize);resize();
+const glyphs=" .,:;irsXA253hMHGS#9B&@";
+const palettes=[
+ ["#8ef7ff","#4ac9e8","#a5f5ff"],
+ ["#c7a5ff","#8b6be8","#e3caff"],
+ ["#ffb8e8","#ed78c8","#ffe0f5"],
+ ["#8fffd5","#43d8b4","#c1ffed"]
+];
+const rand=(a,b)=>a+Math.random()*(b-a);
+class Jelly{
+ constructor(i){this.i=i;this.reset(true)}
+ reset(initial=false){
+  this.x=rand(-W*.1,W*1.1);this.y=initial?rand(-H*.1,H*1.1):H+rand(40,180);
+  this.size=rand(17,34);this.speed=rand(7,22);this.drift=rand(-13,13);
+  this.phase=rand(0,Math.PI*2);this.wobble=rand(5,20);this.pal=palettes[Math.floor(rand(0,palettes.length))];
+  this.tentacles=Math.floor(rand(4,8));this.depth=rand(.55,1.2);this.blink=rand(0,6);
+  this.vx=0;this.vy=0;this.reaction=0;this.wiggle=0;
+ }
+ draw(t,dt){
+  this.y-=this.speed*dt*this.depth;
+  this.x+=Math.sin(t*.00035+this.phase)*this.wobble*dt+this.drift*dt*.18;
+  // A gentle startled swim when touched: dart away, then settle back into the current.
+  this.x+=this.vx*dt; this.y+=this.vy*dt;
+  this.vx*=Math.pow(.91,dt*60); this.vy*=Math.pow(.91,dt*60);
+  this.reaction=Math.max(0,this.reaction-dt);
+  this.wiggle=Math.max(0,this.wiggle-dt*1.7);
+  if(this.y < -this.size*5 || this.x < -100 || this.x>W+100)this.reset();
+  const s=this.size, bob=Math.sin(t*.0012+this.phase)*2.2+Math.sin(t*.012+this.phase)*this.wiggle*1.1;
+  const cx=this.x, cy=this.y+bob, p=this.pal;
+  // ASCII bell: rows of characters shaped into a softly domed cap
+  const rows=7, cols=17;
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  for(let r=0;r<rows;r++){
+   const yy=(r/(rows-1))*s*.76;
+   const half=Math.sqrt(Math.max(0,1-Math.pow((yy/s*.76-.38)/.42,2)))*s*.53;
+   for(let c=0;c<cols;c++){
+    const nx=(c/(cols-1)*2-1), xx=nx*s*.57;
+    if(Math.abs(xx)>half)continue;
+    const edge=Math.abs(xx)/Math.max(half,1);
+    const wave=Math.sin(t*.002+this.phase+r*.7+c*.24)+Math.sin(t*.018+this.phase)*this.wiggle*.35;
+    let idx=Math.floor((1-edge)*5+wave*.7+r*.12);idx=Math.max(1,Math.min(glyphs.length-1,idx));
+    const ch=glyphs[idx];
+    ctx.globalAlpha=(.38+(1-edge)*.48)*this.depth;
+    ctx.fillStyle=r<2?p[2]:p[0];
+    ctx.font=`${Math.max(9,s*.105)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    ctx.shadowColor=p[0];ctx.shadowBlur=7*this.depth;
+    ctx.fillText(ch,cx+xx,cy-s*.28+yy);
+   }
+  }
+  // scalloped lower rim
+  for(let k=0;k<13;k++){
+   const xx=(k/12-.5)*s*1.05, yy=cy+s*.49+Math.sin(k*.85+t*.002+this.phase)*1.5;
+   ctx.globalAlpha=.85*this.depth;ctx.fillStyle=p[1];ctx.font=`${s*.12}px monospace`;
+   ctx.shadowBlur=8;ctx.fillText(k%3===0?"✦":".",cx+xx,yy);
+  }
+  // long ASCII tentacles with independently moving curves
+  for(let j=0;j<this.tentacles;j++){
+   const startX=cx+(j/(this.tentacles-1||1)-.5)*s*.78;
+   const len=s*randFixed(this.i,j,1.3,2.35);
+   ctx.beginPath();
+   for(let k=0;k<=16;k++){
+    const u=k/16, sway=Math.sin(t*.0014+this.phase+j*.9+u*4)*s*(.12+this.wiggle*.055)
+      +Math.sin(t*.012+this.phase+j+u*7)*s*this.wiggle*.045;
+    const x=startX+sway*u+Math.sin(u*5+j)*s*.025;
+    const y=cy+s*.48+u*len;
+    if(k===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+   }
+   ctx.strokeStyle=p[1];ctx.lineWidth=Math.max(.7,s*.018);ctx.globalAlpha=.48*this.depth;
+   ctx.shadowColor=p[0];ctx.shadowBlur=5*this.depth;ctx.stroke();
+   for(let k=2;k<16;k+=3){
+    const u=k/16, sway=Math.sin(t*.0014+this.phase+j*.9+u*4)*s*(.12+this.wiggle*.055)
+      +Math.sin(t*.012+this.phase+j+u*7)*s*this.wiggle*.045;
+    const x=startX+sway*u+Math.sin(u*5+j)*s*.025,y=cy+s*.48+u*len;
+    ctx.fillStyle=p[2];ctx.globalAlpha=.7*this.depth;ctx.font=`${s*.09}px monospace`;
+    ctx.fillText(k%2?"·":"'",x,y);
+   }
+  }
+ }
+}
+function randFixed(a,b,min,max){let n=Math.sin(a*127.1+b*311.7)*43758.5453;n-=Math.floor(n);return min+n*(max-min)}
+const jellies=Array.from({length:13},(_,i)=>new Jelly(i));
+const particles=Array.from({length:140},()=>({x:rand(0,W),y:rand(0,H),r:rand(.5,1.7),v:rand(4,16),a:rand(.12,.5),ph:rand(0,6)}));
+
+// Touch or click a jellyfish to make it dart away and wiggle its ASCII tentacles.
+function pokeJelly(x,y){
+ let target=null,best=Infinity;
+ for(const j of jellies){
+  const d=Math.hypot(j.x-x,j.y-y);
+  const reach=j.size*1.65;
+  if(d<reach && d<best){best=d;target=j}
+ }
+ if(!target)return;
+ const dx=target.x-x,dy=target.y-y,mag=Math.hypot(dx,dy)||1;
+ target.vx+=(dx/mag)*rand(95,155);
+ target.vy+=(dy/mag)*rand(75,125)-35;
+ target.reaction=1.1;target.wiggle=rand(3.5,5.5);
+}
+canvas.addEventListener("pointerdown",e=>{
+ const r=canvas.getBoundingClientRect();
+ pokeJelly(e.clientX-r.left,e.clientY-r.top);
+});
+function frame(now){
+ const dt=Math.min((now-last)/1000||0,.04);last=now;
+ ctx.clearRect(0,0,W,H);
+ const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,"#030b1b");g.addColorStop(.55,"#031629");g.addColorStop(1,"#020811");
+ ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // faint drifting light columns
+ for(let i=0;i<5;i++){
+  const x=(i*W/4+Math.sin(now*.00012+i)*W*.06);
+  const rg=ctx.createLinearGradient(x,0,x+100,H);
+  rg.addColorStop(0,"rgba(60,180,220,0.045)");rg.addColorStop(1,"rgba(30,100,160,0)");
+  ctx.fillStyle=rg;ctx.beginPath();ctx.moveTo(x-25,0);ctx.lineTo(x+35,0);ctx.lineTo(x+190,H);ctx.lineTo(x+70,H);ctx.fill();
+ }
+ for(const q of particles){q.y-=q.v*dt;if(q.y<0){q.y=H;q.x=rand(0,W)}
+  ctx.globalAlpha=q.a*(.7+.3*Math.sin(now*.001+q.ph));ctx.fillStyle="#8cecff";ctx.beginPath();ctx.arc(q.x+Math.sin(now*.0004+q.ph)*5,q.y,q.r,0,Math.PI*2);ctx.fill()}
+ jellies.sort((a,b)=>a.depth-b.depth).forEach(j=>j.draw(now,dt));
+ ctx.globalAlpha=1;ctx.shadowBlur=0;
+ requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body></html>
